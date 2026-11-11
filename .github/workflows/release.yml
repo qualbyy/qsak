@@ -75,15 +75,23 @@ jobs:
           Copy-Item $bin.FullName "src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe"
           Remove-Item -Recurse -Force ffmpeg.zip, ffmpeg-tmp
 
-      - name: Download static ffmpeg sidecar (macOS)
-        if: matrix.platform == 'macos-latest'
+      - name: Download static ffmpeg sidecar (macOS ARM64)
+        if: matrix.platform == 'macos-latest' && matrix.target == 'aarch64-apple-darwin'
         run: |
           mkdir -p src-tauri/binaries
-          curl -L -o ffmpeg.zip https://evermeet.cx/ffmpeg/getrelease/zip
-          unzip -o ffmpeg.zip
-          cp ffmpeg "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
-          chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
-          rm -f ffmpeg ffmpeg.zip
+          curl -L -o ffmpeg.gz https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz
+          gzip -d ffmpeg.gz
+          mv ffmpeg src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+          chmod +x src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+
+      - name: Download static ffmpeg sidecar (macOS x86_64)
+        if: matrix.platform == 'macos-latest' && matrix.target == 'x86_64-apple-darwin'
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -L -o ffmpeg.gz https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz
+          gzip -d ffmpeg.gz
+          mv ffmpeg src-tauri/binaries/ffmpeg-x86_64-apple-darwin
+          chmod +x src-tauri/binaries/ffmpeg-x86_64-apple-darwin
 
       - name: Build and publish Tauri release
         uses: tauri-apps/tauri-action@v0
@@ -96,4 +104,4 @@ jobs:
           releaseBody: "Local-first desktop builds with Rust engines and bundled ffmpeg sidecar."
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          args: --verbose ${{ matrix.args }}
