@@ -1,0 +1,113 @@
+/* ============================================================
+   tokens.css — визуальные токены qplate (стиль desktop, обои dots)
+   ============================================================ */
+
+:root {
+  --accent: #6ea8dc;
+  --accent-rgb: 110, 168, 220;
+  --accent-deep: rgb(139, 185, 227);
+  --accent-dark: rgb(75, 114, 150);
+  --on-accent: #ffffff;
+
+  --bg: rgb(245, 249, 253);
+  --term-bg: rgb(250, 252, 254);
+  --header-bg: rgb(236, 244, 250);
+  --border: rgb(223, 236, 247);
+  --border-dark: rgb(206, 225, 243);
+
+  --text: #141210;
+  --text-dim: #3b352d;
+  --ink: #141210;
+
+  --sand-accent: var(--accent);
+  --sand-dark: rgb(170, 93, 35);
+  --sand-badge: rgb(250, 238, 229);
+  --prompt-user: rgb(228, 169, 124);
+  --prompt-path: rgb(236, 193, 160);
+
+  --dock-bg: rgba(249, 237, 228, 0.88);
+  --dock-hover-bg: rgb(254, 253, 252);
+  --surface-soft: rgb(253, 249, 247);
+  --surface-inset: rgb(254, 251, 250);
+  --surface-deep: rgb(252, 247, 242);
+  --surface-mute: rgb(251, 241, 234);
+  --surface-paper: rgb(254, 253, 252);
+  --hover-strong: rgb(249, 236, 227);
+  --photo-overlay: rgba(95, 52, 20, 0.82);
+
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --radius-window: 8px;
+  --radius-card: 8px;
+  --radius-btn: 6px;
+  --dock-radius: 18px;
+  --dock-icon-radius: 10px;
+  --dock-size: 42px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow: hidden;
+  position: relative;
+  transition: background-color 0.25s ease, color 0.2s ease;
+}
+
+body.no-motion * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Обои «точки» в стиле qplate */
+body[data-wallpaper="dots"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(var(--accent-rgb), 0.34) 1px, transparent 1.25px);
+  background-size: 20px 20px;
+  background-position: center;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Нижний регистр только для элементов хрома qplate, не для данных/кода/форматов */
+.ui-lc {
+  text-transform: lowercase;
+}
+
+.preserve-case {
+  text-transform: none !important;
+}

@@ -1,0 +1,1 @@
+# Place platform-specific ffmpeg-<target-triple> sidecars here during CI release builds

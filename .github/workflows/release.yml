@@ -1,0 +1,99 @@
+name: Release qsak Desktop (Tauri v2)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: "--config src-tauri/tauri.release.conf.json"
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: "--config src-tauri/tauri.release.conf.json"
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin --config src-tauri/tauri.release.conf.json"
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin --config src-tauri/tauri.release.conf.json"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux webkit dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Download static ffmpeg sidecar (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf ffmpeg.tar.xz
+          cp ffmpeg-*-amd64-static/ffmpeg src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+          rm -rf ffmpeg.tar.xz ffmpeg-*-amd64-static
+
+      - name: Download static ffmpeg sidecar (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg-tmp -Force
+          $bin = Get-ChildItem -Path ffmpeg-tmp -Filter ffmpeg.exe -Recurse | Select-Object -First 1
+          Copy-Item $bin.FullName "src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe"
+          Remove-Item -Recurse -Force ffmpeg.zip, ffmpeg-tmp
+
+      - name: Download static ffmpeg sidecar (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -L -o ffmpeg.zip https://evermeet.cx/ffmpeg/getrelease/zip
+          unzip -o ffmpeg.zip
+          cp ffmpeg "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
+          chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
+          rm -f ffmpeg ffmpeg.zip
+
+      - name: Build and publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_GITHUB_REPO: ${{ github.repository }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "qsak v__VERSION__"
+          releaseBody: "Local-first desktop builds with Rust engines and bundled ffmpeg sidecar."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
