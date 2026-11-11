@@ -6,9 +6,9 @@
   "description": "Quick Swiss Army Knife — local-first online/offline format converter & inspector",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS=\"--max-old-space-size=1024\" tsc -b && UV_THREADPOOL_SIZE=1 vite build",
+    "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=1024\" tsc -b && cross-env UV_THREADPOOL_SIZE=1 vite build",
     "preview": "vite preview",
-    "test": "NODE_OPTIONS=\"--max-old-space-size=512\" UV_THREADPOOL_SIZE=1 vitest run --maxWorkers=1 --fileParallelism=false",
+    "test": "cross-env NODE_OPTIONS=\"--max-old-space-size=512\" UV_THREADPOOL_SIZE=1 vitest run --maxWorkers=1 --fileParallelism=false",
     "tauri": "tauri",
     "rust:test": "CARGO_BUILD_JOBS=1 cargo test --manifest-path src-tauri/Cargo.toml"
   },
@@ -51,6 +51,7 @@
     "@types/react-dom": "^19.1.0",
     "@types/turndown": "^5.0.5",
     "@vitejs/plugin-react": "^4.4.1",
+    "cross-env": "^10.1.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^1.0.0",
