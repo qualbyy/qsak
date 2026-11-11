@@ -21,12 +21,12 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             args: "--config src-tauri/tauri.release.conf.json"
-          # - platform: macos-latest
-          #   target: aarch64-apple-darwin
-          #   args: "--target aarch64-apple-darwin --config src-tauri/tauri.release.conf.json"
-          # - platform: macos-latest
-          #   target: x86_64-apple-darwin
-          #   args: "--target x86_64-apple-darwin --config src-tauri/tauri.release.conf.json"
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin --config src-tauri/tauri.release.conf.json"
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin --config src-tauri/tauri.release.conf.json"
 
     runs-on: ${{ matrix.platform }}
 
