@@ -6,7 +6,7 @@ import { marked } from "marked";
 import TurndownService from "turndown";
 import type { ConvertJobResult, TextOperationId } from "../core/types";
 import { replaceExt } from "../core/registry";
-import { md5Hex, sha256Hex } from "./hash";
+import { md5Hex, sha256Hex, sha512Hex } from "./hash";
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -119,10 +119,150 @@ function stringifyDelimited(data: unknown, delimiter: string): string {
   return Papa.unparse(rows as Record<string, unknown>[], { delimiter }) + "\n";
 }
 
+function parseJsonl(raw: string): unknown[] {
+  const rows: unknown[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    rows.push(JSON.parse(trimmed));
+  }
+  return rows;
+}
+
+function stringifyJsonl(data: unknown): string {
+  const rows = Array.isArray(data) ? data : [data];
+  return rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+}
+
+function parseProperties(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("!")) continue;
+    const eq = trimmed.search(/[=:]/);
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const val = trimmed.slice(eq + 1).trim();
+    out[key] = val;
+  }
+  return out;
+}
+
+function stringifyProperties(data: unknown): string {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new Error(".properties requires a key-value object");
+  }
+  const lines: string[] = [];
+  const flatten = (obj: Record<string, unknown>, prefix: string) => {
+    for (const [k, v] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${k}` : k;
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+        flatten(v as Record<string, unknown>, fullKey);
+      } else {
+        lines.push(`${fullKey}=${v === null || v === undefined ? "" : String(v)}`);
+      }
+    }
+  };
+  flatten(data as Record<string, unknown>, "");
+  return lines.join("\n") + "\n";
+}
+
+function sqlEscapeValue(val: unknown): string {
+  if (val === null || val === undefined) return "NULL";
+  if (typeof val === "number") return Number.isFinite(val) ? String(val) : "NULL";
+  if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
+  const str = typeof val === "object" ? JSON.stringify(val) : String(val);
+  return `'${str.replace(/'/g, "''")}'`;
+}
+
+function stringifySqlInsert(data: unknown, tableName = "records"): string {
+  const rows = Array.isArray(data) ? data : [data];
+  if (rows.length === 0) return "-- Empty dataset\n";
+  const objects: Record<string, unknown>[] = rows.map((r) =>
+    typeof r === "object" && r !== null && !Array.isArray(r) ? (r as Record<string, unknown>) : { value: r },
+  );
+  const cols = Array.from(new Set(objects.flatMap((o) => Object.keys(o))));
+  const quotedCols = cols.map((c) => `"${c.replace(/"/g, '""')}"`).join(", ");
+  return (
+    objects
+      .map((obj) => {
+        const vals = cols.map((c) => sqlEscapeValue(obj[c])).join(", ");
+        return `INSERT INTO "${tableName}" (${quotedCols}) VALUES (${vals});`;
+      })
+      .join("\n") + "\n"
+  );
+}
+
+function srtToVtt(raw: string): string {
+  const body = raw
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+  return `WEBVTT\n\n${body.trim()}\n`;
+}
+
+function vttToSrt(raw: string): string {
+  const cleaned = raw
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/^WEBVTT[^\n]*\n+/i, "")
+    .replace(/(\d{2}:\d{2}:\d{2})\.(\d{3})/g, "$1,$2");
+  const blocks = cleaned
+    .trim()
+    .split(/\n{2,}/)
+    .filter((b) => b.includes("-->"));
+  return blocks
+    .map((block, idx) => {
+      const lines = block.split("\n");
+      if (/^\d+$/.test(lines[0].trim())) return block;
+      return `${idx + 1}\n${block}`;
+    })
+    .join("\n\n") + "\n";
+}
+
+function subtitlesToPlainText(raw: string): string {
+  return raw
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/^WEBVTT[^\n]*\n+/i, "")
+    .split("\n")
+    .filter((line) => {
+      const s = line.trim();
+      if (!s) return false;
+      if (/^\d+$/.test(s)) return false;
+      if (/-->/.test(s)) return false;
+      return true;
+    })
+    .map((l) => l.replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean)
+    .join("\n") + "\n";
+}
+
+function stripHtmlTags(html: string): string {
+  return (
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<\/(p|div|h[1-6]|li|tr|blockquote)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/\n{3,}/g, "\n\n")
+      .trim() + "\n"
+  );
+}
+
 export function parseStructured(raw: string, format: string): unknown {
   switch (format.toLowerCase()) {
     case "json":
       return JSON.parse(raw);
+    case "jsonl":
+    case "ndjson":
+      return parseJsonl(raw);
     case "yaml":
     case "yml":
       return yaml.load(raw);
@@ -138,6 +278,8 @@ export function parseStructured(raw: string, format: string): unknown {
       return parseIni(raw);
     case "env":
       return parseEnv(raw);
+    case "properties":
+      return parseProperties(raw);
     default:
       throw new Error(`Unsupported input data format: ${format}`);
   }
@@ -150,6 +292,9 @@ export function stringifyStructured(data: unknown, target: string): { text: stri
       return { text: JSON.stringify(data, null, 2) + "\n", ext: "json", mime: "application/json" };
     case "json-minify":
       return { text: JSON.stringify(data), ext: "json", mime: "application/json" };
+    case "jsonl":
+    case "ndjson":
+      return { text: stringifyJsonl(data), ext: "jsonl", mime: "application/x-ndjson" };
     case "yaml":
       return { text: yaml.dump(data, { noRefs: true, lineWidth: 120 }), ext: "yaml", mime: "application/yaml" };
     case "toml": {
@@ -171,6 +316,10 @@ export function stringifyStructured(data: unknown, target: string): { text: stri
       return { text: stringifyIni(data), ext: "ini", mime: "text/plain" };
     case "env":
       return { text: stringifyEnv(data), ext: "env", mime: "text/plain" };
+    case "properties":
+      return { text: stringifyProperties(data), ext: "properties", mime: "text/plain" };
+    case "sql":
+      return { text: stringifySqlInsert(data), ext: "sql", mime: "application/sql" };
     default:
       throw new Error(`Unsupported output data format: ${target}`);
   }
@@ -217,6 +366,14 @@ export async function runTextOperation(op: TextOperationId, input: string): Prom
       return stringifyStructured(parseStructured(input, "json"), "csv").text;
     case "csv-to-json":
       return stringifyStructured(parseStructured(input, "csv"), "json").text;
+    case "json-to-tsv":
+      return stringifyStructured(parseStructured(input, "json"), "tsv").text;
+    case "tsv-to-json":
+      return stringifyStructured(parseStructured(input, "tsv"), "json").text;
+    case "json-to-jsonl":
+      return stringifyStructured(parseStructured(input, "json"), "jsonl").text;
+    case "jsonl-to-json":
+      return stringifyStructured(parseStructured(input, "jsonl"), "json").text;
     case "ini-to-json":
       return stringifyStructured(parseStructured(input, "ini"), "json").text;
     case "json-to-ini":
@@ -225,6 +382,12 @@ export async function runTextOperation(op: TextOperationId, input: string): Prom
       return stringifyStructured(parseStructured(input, "env"), "json").text;
     case "json-to-env":
       return stringifyStructured(parseStructured(input, "json"), "env").text;
+    case "properties-to-json":
+      return stringifyStructured(parseStructured(input, "properties"), "json").text;
+    case "json-to-properties":
+      return stringifyStructured(parseStructured(input, "json"), "properties").text;
+    case "json-to-sql":
+      return stringifyStructured(parseStructured(input, "json"), "sql").text;
     case "json-pretty":
       return stringifyStructured(parseStructured(input, "json"), "json-pretty").text;
     case "json-minify":
@@ -233,6 +396,14 @@ export async function runTextOperation(op: TextOperationId, input: string): Prom
       return await marked.parse(input);
     case "html-to-md":
       return turndown.turndown(input);
+    case "md-to-txt":
+      return stripHtmlTags(await marked.parse(input));
+    case "html-to-txt":
+      return stripHtmlTags(input);
+    case "srt-to-vtt":
+      return srtToVtt(input);
+    case "vtt-to-srt":
+      return vttToSrt(input);
     case "base64-encode":
       return encodeBase64Utf8(input);
     case "base64-decode":
@@ -260,6 +431,8 @@ export async function runTextOperation(op: TextOperationId, input: string): Prom
       return decodeJwt(input);
     case "hash-sha256":
       return await sha256Hex(new TextEncoder().encode(input));
+    case "hash-sha512":
+      return await sha512Hex(new TextEncoder().encode(input));
     case "hash-md5":
       return md5Hex(new TextEncoder().encode(input));
   }
@@ -289,6 +462,43 @@ export async function convertTextFile(
       outputName: replaceExt(fileName, "md"),
       mime: "text/markdown",
       bytes: new TextEncoder().encode(md),
+    };
+  }
+  if (src === "md" && dst === "txt") {
+    const txt = stripHtmlTags(await marked.parse(input));
+    return {
+      outputName: replaceExt(fileName, "txt"),
+      mime: "text/plain",
+      bytes: new TextEncoder().encode(txt),
+    };
+  }
+  if (src === "html" && dst === "txt") {
+    const txt = stripHtmlTags(input);
+    return {
+      outputName: replaceExt(fileName, "txt"),
+      mime: "text/plain",
+      bytes: new TextEncoder().encode(txt),
+    };
+  }
+  if (src === "srt" && dst === "vtt") {
+    return {
+      outputName: replaceExt(fileName, "vtt"),
+      mime: "text/vtt",
+      bytes: new TextEncoder().encode(srtToVtt(input)),
+    };
+  }
+  if (src === "vtt" && dst === "srt") {
+    return {
+      outputName: replaceExt(fileName, "srt"),
+      mime: "application/x-subrip",
+      bytes: new TextEncoder().encode(vttToSrt(input)),
+    };
+  }
+  if ((src === "srt" || src === "vtt") && dst === "txt") {
+    return {
+      outputName: replaceExt(fileName, "txt"),
+      mime: "text/plain",
+      bytes: new TextEncoder().encode(subtitlesToPlainText(input)),
     };
   }
 

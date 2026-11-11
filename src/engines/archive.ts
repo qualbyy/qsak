@@ -71,7 +71,7 @@ export async function extractArchiveFiles(
   fileName: string,
 ): Promise<Record<string, Uint8Array>> {
   const fmt = sourceFormat.toLowerCase();
-  if (fmt === "zip") {
+  if (["zip", "cbz", "epub", "apk", "jar"].includes(fmt)) {
     return unzipSync(bytes);
   }
   if (fmt === "tgz" || fileName.toLowerCase().endsWith(".tar.gz")) {

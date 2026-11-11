@@ -2,9 +2,23 @@ import * as Comlink from "comlink";
 import type { TaskWorkerApi } from "../workers/task.worker";
 import type { ConvertJobInput, ConvertJobResult, DetectedFormat, InspectResult, TextOperationId } from "./types";
 
+import { AUDIO_FORMAT_SET, VIDEO_FORMAT_SET } from "./registry";
+
 let workerProxy: Comlink.Remote<TaskWorkerApi> | null = null;
 
-const MEDIA_FORMATS = new Set(["mp4", "webm", "mkv", "mov", "avi", "mp3", "wav", "flac", "ogg", "aac", "m4a"]);
+const NATIVE_MEDIA_DST = new Set([
+  "mp4",
+  "webm",
+  "gif",
+  "mp4-mute",
+  "mp4-10mb",
+  "mp4-25mb",
+  "mp3",
+  "wav",
+  "ogg",
+  "aac",
+  "flac",
+]);
 const NATIVE_IMAGE_SRC = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp", "ico"]);
 const NATIVE_IMAGE_DST = new Set(["png", "jpg", "jpeg", "webp", "ico", "gif", "bmp"]);
 const NATIVE_ARCHIVE_SRC = new Set(["zip", "tgz", "tar", "gz", "7z"]);
@@ -40,7 +54,7 @@ export const engineBridge = {
       const dst = job.targetFormat.toLowerCase();
       const { invoke } = await import("@tauri-apps/api/core");
 
-      if (MEDIA_FORMATS.has(src)) {
+      if ((VIDEO_FORMAT_SET.has(src) || AUDIO_FORMAT_SET.has(src)) && NATIVE_MEDIA_DST.has(dst)) {
         const res = await invoke<NativeJobResponse>("native_convert_media", {
           fileName: job.fileName,
           bytes: Array.from(job.bytes),
@@ -80,7 +94,12 @@ export const engineBridge = {
     const { invoke } = await import("@tauri-apps/api/core");
     const selected = await open({
       multiple: false,
-      filters: [{ name: "Media", extensions: ["mp4", "mkv", "mov", "webm", "avi", "mp3", "wav", "flac"] }],
+      filters: [
+        {
+          name: "Media",
+          extensions: ["mp4", "mkv", "mov", "webm", "avi", "flv", "wmv", "m4v", "ts", "mp3", "wav", "flac", "ogg", "opus", "aiff"],
+        },
+      ],
     });
     if (!selected || typeof selected !== "string") return null;
     return invoke<string>("native_convert_media_path", {

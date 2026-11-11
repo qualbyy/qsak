@@ -1,16 +1,15 @@
 import * as Comlink from "comlink";
 import { detectFormat } from "../core/detect";
+import { AUDIO_FORMAT_SET, IMAGE_FORMAT_SET, VIDEO_FORMAT_SET } from "../core/registry";
 import type { ConvertJobInput, ConvertJobResult, DetectedFormat, InspectResult, TextOperationId } from "../core/types";
 import { packFilesToZip, rearchiveToZip } from "../engines/archive";
+import { convertCbzToPdf, extractEpubToText } from "../engines/ebook";
 import { convertImageFile } from "../engines/image";
 import { inspectFile } from "../engines/inspector";
 import { convertMediaFile } from "../engines/media";
 import { convertPdfFile, mergePdfFiles } from "../engines/pdf";
 import { convertTextToXlsx, convertXlsxToText } from "../engines/spreadsheet";
 import { convertTextFile, runTextOperation } from "../engines/text";
-
-const IMAGE_SOURCES = new Set(["png", "jpg", "jpeg", "webp", "avif", "gif", "bmp", "svg", "heic", "heif"]);
-const MEDIA_SOURCES = new Set(["mp4", "webm", "mkv", "mov", "avi", "mp3", "wav", "flac", "ogg", "aac", "m4a"]);
 
 const workerApi = {
   async detect(fileName: string, bytes: Uint8Array): Promise<DetectedFormat> {
@@ -25,6 +24,14 @@ const workerApi = {
       return rearchiveToZip(job.bytes, job.fileName, src);
     }
 
+    if (dst === "cbz-to-pdf") {
+      return convertCbzToPdf(job.bytes, job.fileName);
+    }
+
+    if (dst === "epub-to-txt") {
+      return extractEpubToText(job.bytes, job.fileName);
+    }
+
     if (src === "pdf") {
       return convertPdfFile(job.bytes, job.fileName, dst);
     }
@@ -37,11 +44,11 @@ const workerApi = {
       return convertTextToXlsx(job.bytes, job.fileName, src);
     }
 
-    if (MEDIA_SOURCES.has(src)) {
+    if (VIDEO_FORMAT_SET.has(src) || AUDIO_FORMAT_SET.has(src)) {
       return convertMediaFile(job.bytes, job.fileName, src, dst);
     }
 
-    if (IMAGE_SOURCES.has(src)) {
+    if (IMAGE_FORMAT_SET.has(src)) {
       return convertImageFile(job.bytes, job.fileName, src, dst, job.options);
     }
 

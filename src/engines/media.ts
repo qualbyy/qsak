@@ -43,6 +43,24 @@ function buildFfmpegArgs(
         outputName: "out.webm",
         mime: "video/webm",
       };
+    case "mkv":
+      return {
+        args: ["-i", inputName, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "out.mkv"],
+        outputName: "out.mkv",
+        mime: "video/x-matroska",
+      };
+    case "mov":
+      return {
+        args: ["-i", inputName, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "out.mov"],
+        outputName: "out.mov",
+        mime: "video/quicktime",
+      };
+    case "avi":
+      return {
+        args: ["-i", inputName, "-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-b:a", "192k", "out.avi"],
+        outputName: "out.avi",
+        mime: "video/x-msvideo",
+      };
     case "gif":
       return {
         args: ["-i", inputName, "-vf", "fps=12,scale=480:-1:flags=lanczos", "-loop", "0", "out.gif"],
@@ -104,6 +122,12 @@ function buildFfmpegArgs(
         outputName: "out.ogg",
         mime: "audio/ogg",
       };
+    case "opus":
+      return {
+        args: ["-i", inputName, "-vn", "-c:a", "libopus", "-b:a", "128k", "out.opus"],
+        outputName: "out.opus",
+        mime: "audio/opus",
+      };
     case "aac":
       return {
         args: ["-i", inputName, "-vn", "-c:a", "aac", "-b:a", "192k", "out.m4a"],
@@ -115,6 +139,12 @@ function buildFfmpegArgs(
         args: ["-i", inputName, "-vn", "-c:a", "flac", "out.flac"],
         outputName: "out.flac",
         mime: "audio/flac",
+      };
+    case "aiff":
+      return {
+        args: ["-i", inputName, "-vn", "-c:a", "pcm_s16be", "out.aiff"],
+        outputName: "out.aiff",
+        mime: "audio/aiff",
       };
     default:
       throw new Error(`Unsupported media target format: ${target}`);

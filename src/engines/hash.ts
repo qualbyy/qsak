@@ -12,6 +12,12 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return toHex(new Uint8Array(digest));
 }
 
+export async function sha512Hex(bytes: Uint8Array): Promise<string> {
+  const buf = bytes.slice().buffer;
+  const digest = await crypto.subtle.digest("SHA-512", buf);
+  return toHex(new Uint8Array(digest));
+}
+
 export async function sha1Hex(bytes: Uint8Array): Promise<string> {
   const buf = bytes.slice().buffer;
   const digest = await crypto.subtle.digest("SHA-1", buf);

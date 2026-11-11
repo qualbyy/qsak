@@ -64,14 +64,25 @@ export type TextOperationId =
   | "xml-to-json"
   | "json-to-csv"
   | "csv-to-json"
+  | "json-to-tsv"
+  | "tsv-to-json"
+  | "json-to-jsonl"
+  | "jsonl-to-json"
   | "ini-to-json"
   | "json-to-ini"
   | "env-to-json"
   | "json-to-env"
-  | "md-to-html"
-  | "html-to-md"
+  | "properties-to-json"
+  | "json-to-properties"
+  | "json-to-sql"
   | "json-pretty"
   | "json-minify"
+  | "md-to-html"
+  | "html-to-md"
+  | "md-to-txt"
+  | "html-to-txt"
+  | "srt-to-vtt"
+  | "vtt-to-srt"
   | "base64-encode"
   | "base64-decode"
   | "hex-encode"
@@ -80,7 +91,17 @@ export type TextOperationId =
   | "url-decode"
   | "jwt-decode"
   | "hash-sha256"
+  | "hash-sha512"
   | "hash-md5";
+
+export interface AppLimits {
+  maxFileSizeMb: number;
+  maxBatchFiles: number;
+  maxTotalQueueMb: number;
+  maxUrlCount: number;
+  urlTimeoutSec: number;
+  browserWarnMb: number;
+}
 
 export interface FormatAction {
   target: string;

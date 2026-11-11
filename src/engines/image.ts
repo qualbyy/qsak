@@ -1,6 +1,22 @@
 import type { ConvertJobResult, ConvertOptions } from "../core/types";
 import { replaceExt } from "../core/registry";
+import {
+  decodeBaselineTiffRgba,
+  decodeNetpbmRgba,
+  decodeTgaRgba,
+  encodeBmpRgba,
+  encodeTgaRgba,
+  extractLargestIcoPayload,
+  minifySvg,
+  type RawRgbaImage,
+} from "./imageCodecs";
 import { imageBytesToPdf } from "./pdf";
+
+function toImageData(raw: RawRgbaImage): ImageData {
+  const copy = new Uint8ClampedArray(raw.data.length);
+  copy.set(raw.data);
+  return new ImageData(copy, raw.width, raw.height);
+}
 
 let resvgInitPromise: Promise<void> | null = null;
 
@@ -72,6 +88,26 @@ async function decodeToImageData(
       });
     });
     return imageData;
+  }
+
+  if (fmt === "tiff" || fmt === "tif") {
+    return toImageData(decodeBaselineTiffRgba(bytes));
+  }
+
+  if (fmt === "tga") {
+    return toImageData(decodeTgaRgba(bytes));
+  }
+
+  if (fmt === "ppm" || fmt === "pgm" || fmt === "pbm") {
+    return toImageData(decodeNetpbmRgba(bytes));
+  }
+
+  if (fmt === "ico") {
+    const { kind, payload } = extractLargestIcoPayload(bytes);
+    if (kind === "png") {
+      return decodeRasterBytes(payload, "image/png");
+    }
+    return decodeRasterBytes(payload, "image/bmp");
   }
 
   const mimeMap: Record<string, string> = {
@@ -196,10 +232,20 @@ export async function convertImageFile(
   targetFormat: string,
   options: ConvertOptions = {},
 ): Promise<ConvertJobResult> {
+  const target = targetFormat.toLowerCase();
+  if (sourceFormat.toLowerCase() === "svg" && target === "svg-minify") {
+    const svgText = new TextDecoder("utf-8").decode(bytes);
+    const minified = minifySvg(svgText);
+    return {
+      outputName: replaceExt(fileName, "min.svg"),
+      mime: "image/svg+xml",
+      bytes: new TextEncoder().encode(minified),
+    };
+  }
+
   const quality = Math.max(10, Math.min(100, options.quality ?? 85));
   const decoded = await decodeToImageData(bytes, sourceFormat, options.maxWidth);
   const resized = await resizeImageData(decoded, options.maxWidth, options.maxHeight);
-  const target = targetFormat.toLowerCase();
 
   let outBytes: Uint8Array;
   let mime = "application/octet-stream";
@@ -229,8 +275,18 @@ export async function convertImageFile(
       mime = "image/png";
       break;
     }
+    case "bmp": {
+      outBytes = encodeBmpRgba({ width: resized.width, height: resized.height, data: resized.data });
+      mime = "image/bmp";
+      break;
+    }
+    case "tga": {
+      outBytes = encodeTgaRgba({ width: resized.width, height: resized.height, data: resized.data });
+      mime = "image/x-tga";
+      break;
+    }
     case "ico": {
-      outBytes = await buildIco(resized, options.iconSizes);
+      outBytes = await buildIco(resized, options.iconSizes ?? [16, 32, 48, 64, 128, 256]);
       mime = "image/x-icon";
       break;
     }

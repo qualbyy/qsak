@@ -1,26 +1,32 @@
 import {
+  AlertTriangle,
   Archive,
   Download,
   FileSearch,
   FileText,
   HardDriveDownload,
   Laptop,
+  Link2,
   Play,
   Settings,
   Trash2,
   Upload,
   Wrench,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { engineBridge, isTauriRuntime } from "../core/bridge";
 import { detectTextFormat } from "../core/detect";
 import { detectLang, DICT, type Lang } from "../core/i18n";
+import { checkFileLimits, checkUrlCountLimit, loadLimits, saveLimits } from "../core/limits";
 import { getActionsForFormat } from "../core/registry";
 import { applyQplateTheme, type ThemeMode } from "../core/theme";
-import type { ConvertJobResult, DetectedFormat, InspectResult, TextOperationId } from "../core/types";
+import type { AppLimits, ConvertJobResult, DetectedFormat, InspectResult, TextOperationId } from "../core/types";
+import { fetchUrlAsBytes, isUrlListContent, parseUrlList } from "../core/urlImporter";
 import { InspectorView } from "./InspectorView";
 import { DownloadModal, OfflineModal, SettingsModal } from "./Modals";
 import { TextPlayground } from "./TextPlayground";
+import { UrlImportModal } from "./UrlImportModal";
 import { downloadBytes, formatBytes } from "./utils";
 
 interface QueueItem {
@@ -35,7 +41,7 @@ interface QueueItem {
 }
 
 type ActiveTab = "files" | "text" | "inspector";
-type ActiveModal = "settings" | "offline" | "download" | null;
+type ActiveModal = "settings" | "offline" | "download" | "url" | null;
 
 const BROWSER_HEAVY_THRESHOLD = 450 * 1024 * 1024;
 
@@ -67,6 +73,15 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isNative = isTauriRuntime();
   const t = DICT[lang];
+
+  const [limits, setLimits] = useState<AppLimits>(() => loadLimits(isNative));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [detectedUrlList, setDetectedUrlList] = useState<{ fileName: string; rawText: string; count: number } | null>(null);
+  const [urlPrefill, setUrlPrefill] = useState<string>("");
+
+  useEffect(() => {
+    saveLimits(limits);
+  }, [limits]);
 
   useEffect(() => {
     applyQplateTheme(theme, motion);
@@ -106,32 +121,144 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const ingestFiles = useCallback(async (files: FileList | File[]) => {
-    const list = Array.from(files);
-    if (list.length === 0) return;
+  const appendValidatedEntries = useCallback(
+    async (
+      entries: Array<{ fileName: string; bytes: Uint8Array }>,
+      preferredTarget = "",
+    ): Promise<string[]> => {
+      const violations: string[] = [];
+      const created: QueueItem[] = [];
+      let runningCount = queue.length;
+      let runningBytes = queue.reduce((acc, item) => acc + item.bytes.byteLength, 0);
 
-    const created: QueueItem[] = [];
-    for (const file of list) {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const detected = await engineBridge.detect(file.name, buf);
-      const actions = getActionsForFormat(detected.id);
-      created.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        fileName: file.name,
-        bytes: buf,
-        detected,
-        targetFormat: actions[0]?.target ?? "",
-        status: "queued",
-      });
-    }
+      for (const entry of entries) {
+        const check = checkFileLimits(entry.bytes.byteLength, runningCount, runningBytes, limits);
+        if (!check.ok) {
+          if (check.reason === "batch-count") {
+            violations.push(`${entry.fileName}: max ${check.limitValue} files`);
+          } else if (check.reason === "file-size") {
+            violations.push(`${entry.fileName}: ${check.actualValue} MB > ${check.limitValue} MB`);
+          } else if (check.reason === "total-size") {
+            violations.push(`${entry.fileName}: queue > ${check.limitValue} MB`);
+          }
+          continue;
+        }
 
-    setQueue((prev) => [...prev, ...created]);
-    setTab("files");
+        const detected = await engineBridge.detect(entry.fileName, entry.bytes);
+        const actions = getActionsForFormat(detected.id);
+        const target =
+          preferredTarget && actions.some((a) => a.target === preferredTarget)
+            ? preferredTarget
+            : (actions[0]?.target ?? "");
 
-    if (created.length === 1) {
-      void engineBridge.inspect(created[0].fileName, created[0].bytes).then(setInspectResult);
-    }
-  }, []);
+        created.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          fileName: entry.fileName,
+          bytes: entry.bytes,
+          detected,
+          targetFormat: target,
+          status: "queued",
+        });
+        runningCount += 1;
+        runningBytes += entry.bytes.byteLength;
+      }
+
+      if (created.length > 0) {
+        setQueue((prev) => [...prev, ...created]);
+        setTab("files");
+        if (created.length === 1) {
+          void engineBridge.inspect(created[0].fileName, created[0].bytes).then(setInspectResult);
+        }
+      }
+
+      return violations;
+    },
+    [limits, queue],
+  );
+
+  const importFromUrls = useCallback(
+    async (urls: string[], preferredTarget = "") => {
+      const countCheck = checkUrlCountLimit(urls.length, limits);
+      const allowedUrls = countCheck.ok ? urls : urls.slice(0, limits.maxUrlCount);
+      const errors: string[] = [];
+
+      if (!countCheck.ok) {
+        errors.push(`URL limit (${limits.maxUrlCount}) — truncated ${urls.length - allowedUrls.length}`);
+      }
+
+      const fetchedEntries: Array<{ fileName: string; bytes: Uint8Array }> = [];
+      for (const url of allowedUrls) {
+        try {
+          const res = await fetchUrlAsBytes(url, limits);
+          fetchedEntries.push({ fileName: res.fileName, bytes: res.bytes });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${url}: ${msg}`);
+        }
+      }
+
+      const limitErrors = await appendValidatedEntries(fetchedEntries, preferredTarget);
+      const allWarnings = [...errors, ...limitErrors];
+      if (allWarnings.length > 0) {
+        setNotice(`${t.limitExceededTitle}: ${allWarnings.slice(0, 3).join(" · ")}${allWarnings.length > 3 ? ` (+${allWarnings.length - 3})` : ""}`);
+      } else {
+        setNotice(null);
+      }
+    },
+    [appendValidatedEntries, limits, t.limitExceededTitle],
+  );
+
+  const ingestFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+
+      const entries: Array<{ fileName: string; bytes: Uint8Array }> = [];
+      const preErrors: string[] = [];
+      const autoUrlFiles: Array<{ fileName: string; text: string }> = [];
+
+      for (const file of list) {
+        const lower = file.name.toLowerCase();
+        // Pre-check file size before reading full ArrayBuffer into RAM
+        const maxBytes = limits.maxFileSizeMb > 0 ? limits.maxFileSizeMb * 1024 * 1024 : Infinity;
+        if (file.size > maxBytes) {
+          preErrors.push(`${file.name}: ${Math.ceil(file.size / (1024 * 1024))} MB > ${limits.maxFileSizeMb} MB`);
+          continue;
+        }
+
+        const buf = new Uint8Array(await file.arrayBuffer());
+        if (lower.endsWith(".urls") || lower.endsWith(".list") || lower.endsWith(".url") || lower.endsWith(".txt")) {
+          const sample = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+          if (isUrlListContent(file.name, sample)) {
+            if (lower.endsWith(".urls") || lower.endsWith(".list") || lower.endsWith(".url")) {
+              autoUrlFiles.push({ fileName: file.name, text: sample });
+              continue;
+            }
+            const parsed = parseUrlList(sample);
+            setDetectedUrlList({ fileName: file.name, rawText: sample, count: parsed.urls.length });
+          }
+        }
+
+        entries.push({ fileName: file.name, bytes: buf });
+      }
+
+      const limitErrors = await appendValidatedEntries(entries);
+      const allErrors = [...preErrors, ...limitErrors];
+      if (allErrors.length > 0) {
+        setNotice(`${t.limitExceededTitle}: ${allErrors.slice(0, 3).join(" · ")}${allErrors.length > 3 ? ` (+${allErrors.length - 3})` : ""}`);
+      } else {
+        setNotice(null);
+      }
+
+      for (const urlFile of autoUrlFiles) {
+        const parsed = parseUrlList(urlFile.text);
+        if (parsed.urls.length > 0) {
+          await importFromUrls(parsed.urls);
+        }
+      }
+    },
+    [appendValidatedEntries, importFromUrls, limits.maxFileSizeMb, t.limitExceededTitle],
+  );
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -148,12 +275,23 @@ export function App() {
       const pastedText = e.clipboardData?.getData("text/plain");
       if (pastedText && pastedText.trim()) {
         e.preventDefault();
+        const urlParsed = parseUrlList(pastedText);
+        if (urlParsed.urls.length > 0 && urlParsed.invalidLines.length === 0) {
+          setUrlPrefill(pastedText.trim());
+          setModal("url");
+          return;
+        }
         const guessed = detectTextFormat(pastedText);
         if (guessed.id === "json") setTextOp("json-to-yaml");
+        else if (guessed.id === "jsonl") setTextOp("jsonl-to-json");
         else if (guessed.id === "yaml") setTextOp("yaml-to-json");
         else if (guessed.id === "toml") setTextOp("toml-to-json");
         else if (guessed.id === "xml") setTextOp("xml-to-json");
         else if (guessed.id === "csv") setTextOp("csv-to-json");
+        else if (guessed.id === "tsv") setTextOp("tsv-to-json");
+        else if (guessed.id === "properties") setTextOp("properties-to-json");
+        else if (guessed.id === "srt") setTextOp("srt-to-vtt");
+        else if (guessed.id === "vtt") setTextOp("vtt-to-srt");
         else if (guessed.id === "md") setTextOp("md-to-html");
         else if (guessed.id === "html") setTextOp("html-to-md");
         setTextInitialInput(pastedText);
@@ -214,6 +352,7 @@ export function App() {
   const doneCount = useMemo(() => queue.filter((q) => q.status === "done").length, [queue]);
   const pdfCount = useMemo(() => queue.filter((q) => q.detected.id === "pdf").length, [queue]);
   const hasImageInQueue = useMemo(() => queue.some((q) => q.detected.category === "image"), [queue]);
+  const totalQueueBytes = useMemo(() => queue.reduce((acc, q) => acc + q.bytes.byteLength, 0), [queue]);
 
   async function mergeAllPdfs() {
     const pdfs = queue.filter((q) => q.detected.id === "pdf").map((q) => ({ name: q.fileName, bytes: q.bytes }));
@@ -244,6 +383,13 @@ export function App() {
             </div>
 
             <div className="window-actions">
+              {(limits.maxBatchFiles > 0 || limits.maxTotalQueueMb > 0) && (
+                <span className="badge preserve-case" title={t.limitsSectionTitle}>
+                  {queue.length}
+                  {limits.maxBatchFiles > 0 ? `/${limits.maxBatchFiles}` : ""} · {formatBytes(totalQueueBytes)}
+                  {limits.maxTotalQueueMb > 0 ? ` / ${limits.maxTotalQueueMb} MB` : ""}
+                </span>
+              )}
               <span className={`badge ui-lc ${online || isNative ? "is-online" : ""}`}>
                 <span className={`badge-dot ${online || isNative ? "" : "is-offline"}`} />
                 {isNative ? t.statusDesktop : online ? t.statusOnline : t.statusOffline}
@@ -333,6 +479,18 @@ export function App() {
                   </div>
                   <div style={{ display: "flex", gap: "8px", marginTop: "4px", flexWrap: "wrap", justifyContent: "center" }}>
                     <span className="icon-btn is-primary ui-lc">{t.pickFiles}</span>
+                    <button
+                      type="button"
+                      className="icon-btn ui-lc"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUrlPrefill("");
+                        setModal("url");
+                      }}
+                    >
+                      <Link2 size={13} />
+                      {t.importUrlBtn}
+                    </button>
                     {isNative && (
                       <button
                         type="button"
@@ -410,13 +568,76 @@ export function App() {
                   </div>
                 )}
 
+                {notice && (
+                  <div
+                    className="panel-card"
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      borderColor: "var(--accent)",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--sand-dark)" }}>
+                      <AlertTriangle size={14} />
+                      <span className="preserve-case">{notice}</span>
+                    </div>
+                    <button type="button" className="icon-btn ui-lc" onClick={() => setNotice(null)}>
+                      <X size={12} />
+                      {t.dismissBtn}
+                    </button>
+                  </div>
+                )}
+
+                {detectedUrlList && (
+                  <div
+                    className="panel-card"
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      borderColor: "var(--accent)",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
+                      <Link2 size={14} style={{ color: "var(--accent)" }} />
+                      <span className="preserve-case">
+                        {t.urlDetectedBanner}: <b>{detectedUrlList.fileName}</b> ({detectedUrlList.count})
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        className="icon-btn is-primary ui-lc"
+                        onClick={() => {
+                          setUrlPrefill(detectedUrlList.rawText);
+                          setDetectedUrlList(null);
+                          setModal("url");
+                        }}
+                      >
+                        <Link2 size={13} />
+                        {t.urlDetectedAction}
+                      </button>
+                      <button type="button" className="icon-btn" onClick={() => setDetectedUrlList(null)}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {queue.length === 0 ? (
                   <p className="empty-note ui-lc">{t.noFilesYet}</p>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     {queue.map((item) => {
                       const actions = getActionsForFormat(item.detected.id);
-                      const isHeavy = !isNative && item.bytes.byteLength > BROWSER_HEAVY_THRESHOLD;
+                      const warnBytes = (limits.browserWarnMb > 0 ? limits.browserWarnMb : 0) * 1024 * 1024;
+                      const isHeavy =
+                        !isNative &&
+                        (warnBytes > 0 ? item.bytes.byteLength > warnBytes : item.bytes.byteLength > BROWSER_HEAVY_THRESHOLD);
 
                       return (
                         <div key={item.id} className="file-row" style={{ flexWrap: "wrap" }}>
@@ -583,9 +804,21 @@ export function App() {
           lang={lang}
           theme={theme}
           motion={motion}
+          limits={limits}
           onChangeLang={setLang}
           onChangeTheme={setTheme}
           onChangeMotion={setMotion}
+          onChangeLimits={setLimits}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {modal === "url" && (
+        <UrlImportModal
+          lang={lang}
+          limits={limits}
+          initialText={urlPrefill}
+          onImport={importFromUrls}
           onClose={() => setModal(null)}
         />
       )}
