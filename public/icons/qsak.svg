@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <rect width="64" height="64" rx="14" fill="#6ea8dc"/>
-  <rect x="10" y="10" width="44" height="44" rx="9" stroke="#fcf5f0" stroke-width="2.5"/>
-  <path d="M22 24L32 18L42 24V40L32 46L22 40V24Z" stroke="#fcf5f0" stroke-width="2.5" stroke-linejoin="round"/>
-  <path d="M22 24L32 30L42 24M32 30V46" stroke="#fcf5f0" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- circular rotating arrows -->
+  <path d="M32 15 A 17 17 0 0 1 49 32 A 17 17 0 0 1 45.2 42.2" stroke="#fcf5f0" stroke-width="3" stroke-linecap="round"/>
+  <polyline points="23 15 32 15 32 24" stroke="#fcf5f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 49 A 17 17 0 0 1 15 32 A 17 17 0 0 1 18.8 21.8" stroke="#fcf5f0" stroke-width="3" stroke-linecap="round"/>
+  <polyline points="41 49 32 49 32 40" stroke="#fcf5f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

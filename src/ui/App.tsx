@@ -80,8 +80,10 @@ export function App() {
   const [urlPrefill, setUrlPrefill] = useState<string>("");
 
   useEffect(() => {
-    saveLimits(limits);
-  }, [limits]);
+    if (isNative) {
+      saveLimits(limits);
+    }
+  }, [limits, isNative]);
 
   useEffect(() => {
     applyQplateTheme(theme, motion);
@@ -383,7 +385,7 @@ export function App() {
             </div>
 
             <div className="window-actions">
-              {(limits.maxBatchFiles > 0 || limits.maxTotalQueueMb > 0) && (
+              {isNative && (limits.maxBatchFiles > 0 || limits.maxTotalQueueMb > 0) && (
                 <span className="badge preserve-case" title={t.limitsSectionTitle}>
                   {queue.length}
                   {limits.maxBatchFiles > 0 ? `/${limits.maxBatchFiles}` : ""} · {formatBytes(totalQueueBytes)}

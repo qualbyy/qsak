@@ -126,110 +126,112 @@ export function SettingsModal({
         />
       </div>
 
-      <div
-        style={{
-          marginTop: "6px",
-          paddingTop: "10px",
-          borderTop: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span className="ui-lc" style={{ fontWeight: 600, fontSize: "12.5px" }}>
-            {t.limitsSectionTitle}
-          </span>
-          <button
-            type="button"
-            className="icon-btn ui-lc"
-            onClick={() => onChangeLimits(getDefaultLimits(isDesktop))}
-          >
-            <RotateCcw size={12} />
-            {t.limitResetBtn}
-          </button>
-        </div>
+      {isDesktop && (
+        <div
+          style={{
+            marginTop: "6px",
+            paddingTop: "10px",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span className="ui-lc" style={{ fontWeight: 600, fontSize: "12.5px" }}>
+              {t.limitsSectionTitle}
+            </span>
+            <button
+              type="button"
+              className="icon-btn ui-lc"
+              onClick={() => onChangeLimits(getDefaultLimits(isDesktop))}
+            >
+              <RotateCcw size={12} />
+              {t.limitResetBtn}
+            </button>
+          </div>
 
-        <div className="setting-row">
-          <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            {t.limitMaxFileLabel}
-          </span>
-          <input
-            type="number"
-            min={0}
-            className="field-input preserve-case"
-            style={{ width: "92px" }}
-            value={limits.maxFileSizeMb}
-            onChange={(e) =>
-              onChangeLimits({ ...limits, maxFileSizeMb: Math.max(0, Number(e.target.value) || 0) })
-            }
-          />
-        </div>
+          <div className="setting-row">
+            <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+              {t.limitMaxFileLabel}
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="field-input preserve-case"
+              style={{ width: "92px" }}
+              value={limits.maxFileSizeMb}
+              onChange={(e) =>
+                onChangeLimits({ ...limits, maxFileSizeMb: Math.max(0, Number(e.target.value) || 0) })
+              }
+            />
+          </div>
 
-        <div className="setting-row">
-          <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            {t.limitMaxBatchLabel}
-          </span>
-          <input
-            type="number"
-            min={0}
-            className="field-input preserve-case"
-            style={{ width: "92px" }}
-            value={limits.maxBatchFiles}
-            onChange={(e) =>
-              onChangeLimits({ ...limits, maxBatchFiles: Math.max(0, Number(e.target.value) || 0) })
-            }
-          />
-        </div>
+          <div className="setting-row">
+            <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+              {t.limitMaxBatchLabel}
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="field-input preserve-case"
+              style={{ width: "92px" }}
+              value={limits.maxBatchFiles}
+              onChange={(e) =>
+                onChangeLimits({ ...limits, maxBatchFiles: Math.max(0, Number(e.target.value) || 0) })
+              }
+            />
+          </div>
 
-        <div className="setting-row">
-          <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            {t.limitMaxTotalLabel}
-          </span>
-          <input
-            type="number"
-            min={0}
-            className="field-input preserve-case"
-            style={{ width: "92px" }}
-            value={limits.maxTotalQueueMb}
-            onChange={(e) =>
-              onChangeLimits({ ...limits, maxTotalQueueMb: Math.max(0, Number(e.target.value) || 0) })
-            }
-          />
-        </div>
+          <div className="setting-row">
+            <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+              {t.limitMaxTotalLabel}
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="field-input preserve-case"
+              style={{ width: "92px" }}
+              value={limits.maxTotalQueueMb}
+              onChange={(e) =>
+                onChangeLimits({ ...limits, maxTotalQueueMb: Math.max(0, Number(e.target.value) || 0) })
+              }
+            />
+          </div>
 
-        <div className="setting-row">
-          <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            {t.limitMaxUrlsLabel}
-          </span>
-          <input
-            type="number"
-            min={0}
-            className="field-input preserve-case"
-            style={{ width: "92px" }}
-            value={limits.maxUrlCount}
-            onChange={(e) =>
-              onChangeLimits({ ...limits, maxUrlCount: Math.max(0, Number(e.target.value) || 0) })
-            }
-          />
-        </div>
+          <div className="setting-row">
+            <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+              {t.limitMaxUrlsLabel}
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="field-input preserve-case"
+              style={{ width: "92px" }}
+              value={limits.maxUrlCount}
+              onChange={(e) =>
+                onChangeLimits({ ...limits, maxUrlCount: Math.max(0, Number(e.target.value) || 0) })
+              }
+            />
+          </div>
 
-        <div className="setting-row">
-          <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            {t.limitTimeoutLabel}
-          </span>
-          <input
-            type="number"
-            min={5}
-            className="field-input preserve-case"
-            style={{ width: "92px" }}
-            value={limits.urlTimeoutSec}
-            onChange={(e) =>
-              onChangeLimits({ ...limits, urlTimeoutSec: Math.max(5, Number(e.target.value) || 5) })
-            }
-          />
+          <div className="setting-row">
+            <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+              {t.limitTimeoutLabel}
+            </span>
+            <input
+              type="number"
+              min={5}
+              className="field-input preserve-case"
+              style={{ width: "92px" }}
+              value={limits.urlTimeoutSec}
+              onChange={(e) =>
+                onChangeLimits({ ...limits, urlTimeoutSec: Math.max(5, Number(e.target.value) || 5) })
+              }
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div
         style={{
