@@ -67,8 +67,8 @@ export function TextPlayground({ lang, initialInput, selectedOp, onChangeOp }: T
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
-      <div className="panel-card" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+      <div className="panel-card text-toolbar">
+        <div className="text-toolbar-group">
           <span className="ui-lc" style={{ fontSize: "12px", color: "var(--text-dim)" }}>
             {t.operationLabel}:
           </span>
@@ -91,7 +91,7 @@ export function TextPlayground({ lang, initialInput, selectedOp, onChangeOp }: T
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <div className="text-toolbar-actions">
           <button type="button" className="icon-btn is-primary ui-lc" onClick={() => void execute()}>
             <Play size={13} />
             {t.runBtn}
